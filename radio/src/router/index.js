@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import PreferitiView from '../views/PreferitiView.vue'
+import MappamondoView from '../views/MappamondoView.vue'
 
 const routes = [
   {
@@ -12,7 +13,12 @@ const routes = [
     path: '/preferiti',
     name: 'Preferiti',
     component: PreferitiView
-  }
+  },
+  {
+    path: '/mappamondo',
+    name: 'mappamondo',
+    component: MappamondoView
+  },
   // Aggiungi altre rotte qui, se necessario
 ]
 

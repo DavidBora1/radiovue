@@ -1,16 +1,26 @@
 <template>
   <v-container>
-    <h1>Homepage</h1>
+    <h1 class="title">Homepage</h1>
+    <v-text-field v-model="searchQuery" label="Cerca per nome" outlined dense @input="searchRadios"
+      clearable></v-text-field>
     <v-row>
-      <v-col cols="12" sm="6" md="4" lg="3" v-for="radio in radios" :key="radio.id">
+      <v-col cols="12" sm="6" md="4" lg="3" v-for="radio in filteredRadios" :key="radio.id">
         <v-card class="radio-card" flat tile>
+          <v-tooltip bottom>
+            <template #activator="{ on }">
+              <div v-bind="on" class="radio-name">{{ getShortenedName(radio) }}</div>
+            </template>
+            <span>{{ radio.name }}</span>
+          </v-tooltip>
           <v-img :src="radio.favicon || defaultImage" class="card-image" :alt="radio.name" />
           <div class="radio-info">
-            <v-card-title class="radio-name">{{ radio.name }}</v-card-title>
-            <div class="song-name" v-if="radio.playing && radio.song">{{ radio.song.title }}</div>
+            <div class="song-info" v-if="radio.playing && radio.song">
+              <div class="song-name">{{ radio.song.title }}</div>
+              <div class="artist-name">{{ radio.song.artist }}</div>
+            </div>
           </div>
           <div class="controls">
-            <v-btn @click="togglePlayPause(radio)" :color="radio.playing ? 'error' : 'primary'" small>
+            <v-btn @click="togglePlayPause(radio)" :color="radio.playing ? 'error' : 'primary'" small outlined>
               {{ radio.playing ? 'Pause' : 'Play' }}
             </v-btn>
             <v-btn @click="toggleFavorite(radio)" small icon>
@@ -34,20 +44,27 @@ export default {
   data() {
     return {
       radios: [],
+      filteredRadios: [],
+      searchQuery: '',
       defaultImage,
     }
   },
   methods: {
     async fetchRadios() {
-      const response = await fetch('https://nl1.api.radio-browser.info/json/stations/search?limit=100&countrycode=IT&hidebroken=true&order=clickcount&reverse=true');
-      const data = await response.json();
-      return data.filter(radio => radio.countrycode === 'IT').map(radio => ({
-        ...radio,
-        favorite: false,
-        showControls: false,
-        playing: false,
-        audioPlayer: new Audio(),
-      }));
+      try {
+        const response = await fetch('https://nl1.api.radio-browser.info/json/stations/search?limit=100&countrycode=IT&hidebroken=true&order=clickcount&reverse=true');
+        const data = await response.json();
+        return data.filter(radio => radio.countrycode === 'IT').map(radio => ({
+          ...radio,
+          favorite: false,
+          showControls: false,
+          playing: false,
+          audioPlayer: new Audio(),
+        }));
+      } catch (error) {
+        console.error('Error fetching radios:', error);
+        throw error;
+      }
     },
     async getRadios() {
       try {
@@ -58,28 +75,24 @@ export default {
       }
     },
     async fetchSongInfo(radio) {
-      // Chiamata API per recuperare informazioni sulla canzone da Last.fm o altro servizio
-      // Esempio di implementazione con Last.fm:
-      const apiKey = '13720487addc32a8e3822f68791f5c29';
-      const apiUrl = `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${apiKey}&artist=${encodeURIComponent(radio.artist)}&track=${encodeURIComponent(radio.title)}&format=json`;
-
+      const apiUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(radio.artist)}/${encodeURIComponent(radio.title)}`;
       try {
         const response = await fetch(apiUrl);
         const data = await response.json();
-        const songInfo = data.track;
-        radio.song = {
-          title: songInfo.name,
-          artist: songInfo.artist.name,
-          duration: songInfo.duration,
-          album: songInfo.album.title,
-          // Altre informazioni sulla canzone da recuperare secondo necessità
-        };
+        if (data.lyrics) {
+          radio.song = {
+            title: radio.title,
+            artist: radio.artist,
+            lyrics: data.lyrics
+          };
+        } else {
+          console.error('Lyrics not found');
+        }
       } catch (error) {
         console.error('Error fetching song info:', error);
       }
     },
     async playRadio(radio) {
-      // Logica per riprodurre la radio
       const audioUrl = radio.url_resolved || radio.url;
       if (audioUrl.includes('m3u8')) {
         if (Hls.isSupported()) {
@@ -88,32 +101,43 @@ export default {
           hls.attachMedia(radio.audioPlayer);
         } else {
           console.error('HLS is not supported in this browser.');
+          return;
         }
       } else {
         radio.audioPlayer.src = audioUrl;
       }
-      radio.audioPlayer.play()
-        .then(() => {
-          // Chiamata API per recuperare informazioni sulla canzone
-          this.fetchSongInfo(radio);
-        })
-        .catch(error => {
-          console.error('Error playing audio:', error);
-          if (error.name === 'NotAllowedError') {
-            console.error('Please ensure that the audio playback is allowed in your browser settings.');
-          }
-        });
-      radio.playing = true;
+      try {
+        await radio.audioPlayer.play();
+        await this.fetchSongInfo(radio); // Attendiamo che le informazioni sulla canzone vengano ottenute
+        radio.playing = true;
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        if (error.name === 'NotAllowedError') {
+          console.error('Please ensure that the audio playback is allowed in your browser settings.');
+        }
+      }
+    },
+
+    searchRadios() {
+      if (this.searchQuery.trim() === '') {
+        this.filteredRadios = this.radios;
+      } else {
+        this.filteredRadios = this.radios.filter(radio =>
+          radio.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+        );
+      }
     },
     pauseRadio(radio) {
       radio.audioPlayer.pause();
       radio.playing = false;
     },
-    togglePlayPause(radio) {
+    async togglePlayPause(radio) {
       if (radio.playing) {
         this.pauseRadio(radio);
       } else {
-        this.pauseAllRadios(); // Pause all other radios
+        // Ferma la riproduzione di tutte le radio nella HomeView
+        this.$emit('stopAllRadios');
+        this.pauseAllRadios();
         this.playRadio(radio);
       }
     },
@@ -143,22 +167,37 @@ export default {
     },
     retrieveFavorites() {
       const favorites = JSON.parse(localStorage.getItem('favorites')) || [];
-      this.$data.radios.forEach(radio => {
+      this.radios.forEach(radio => {
         const fav = favorites.find(f => f.changeuuid === radio.changeuuid);
         radio.favorite = fav ? fav.favorite : false;
       });
     },
+    getShortenedName(radio) {
+      if (radio.name.length > 20) {
+        return radio.name.substring(0, 20) + '...';
+      } else {
+        return radio.name;
+      }
+    },
   },
   created() {
-    this.getRadios();
+    this.getRadios().then(() => {
+      // Mostra tutte le radio all'avvio
+      this.filteredRadios = this.radios;
+    });
   },
+  beforeRouteLeave(to, from, next) {
+    // Pausa la riproduzione della radio quando si lascia la HomeView
+    this.pauseAllRadios();
+    next();
+  }
 }
 </script>
 
 <style scoped>
 .radio-card {
   max-width: 300px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   border-radius: 10px;
   margin-bottom: 20px;
   transition: box-shadow 0.3s;
@@ -179,22 +218,23 @@ export default {
 }
 
 .radio-name {
-  font-size: 1.2em;
+  font-size: 1.4em;
   font-weight: bold;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.song-name {
+  font-size: 1.1em;
+  color: #555;
   margin-bottom: 10px;
 }
 
 .controls {
   display: flex;
   align-items: center;
-  justify-content: space-around;
+  justify-content: center;
   padding: 10px;
-}
-
-.song-name {
-  font-size: 1em;
-  color: #777;
-  margin-bottom: 10px;
 }
 
 .sound-wave {
@@ -234,5 +274,12 @@ export default {
   100% {
     transform: scaleY(1);
   }
+}
+
+.title {
+  font-family: 'Roboto', sans-serif;
+  font-size: 2em;
+  color: #2c3e50;
+  margin-bottom: 20px;
 }
 </style>

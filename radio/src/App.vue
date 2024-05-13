@@ -1,31 +1,36 @@
 <template>
   <nav>
-    <router-link to="/">Home</router-link> |
-    <router-link to="/preferiti">Preferiti</router-link>
-    <!-- Aggiungi ulteriori link qui, se necessario -->
+    <router-link to="/" class="nav-link">Home</router-link> |
+    <router-link to="/preferiti" class="nav-link">Preferiti</router-link> |
+    <router-link to="/mappamondo" class="nav-link">Mappamondo</router-link>
   </nav>
   <router-view/>
 </template>
 
 <style>
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Roboto', sans-serif;
   text-align: center;
-  color: #2c3e50;
+  color: #333;
 }
 
 nav {
-  padding: 30px;
+  padding: 20px;
 }
 
-nav a {
+.nav-link {
   font-weight: bold;
-  color: #2c3e50;
+  color: #555;
+  text-decoration: none;
+  padding: 5px 10px;
+  transition: color 0.3s ease;
 }
 
-nav a.router-link-exact-active {
-  color: #42b983;
+.nav-link:hover {
+  color: #007bff;
+}
+
+.router-link-exact-active {
+  color: #007bff;
 }
 </style>
